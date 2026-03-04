@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KM PDF Online - Free JPG to PDF Converter</title>
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+body{
+  font-family:Segoe UI;
+  margin:0;
+  background:linear-gradient(135deg,#667eea,#764ba2);
+}
+.container{
+  max-width:1100px;
+  margin:20px auto;
+  background:#fff;
+  padding:20px;
+  border-radius:15px;
+}
+h1{
+  text-align:center;
+  font-size:36px;
+  background:linear-gradient(45deg,#ff0080,#ff8c00);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+}
+.top-bar{
+  display:flex;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:10px;
+}
+button,select{
+  padding:8px 14px;
+  background:#667eea;
+  color:white;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+}
+.drop-zone{
+  border:2px dashed #667eea;
+  padding:25px;
+  text-align:center;
+  border-radius:12px;
+  margin:15px 0;
+  cursor:pointer;
+}
+.preview{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+}
+.image-box{
+  position:relative;
+}
+.image-box img{
+  width:120px;
+  border-radius:8px;
+  cursor:pointer;
+}
+.remove-btn{
+  position:absolute;
+  top:5px;
+  right:5px;
+  background:red;
+  color:white;
+  border:none;
+  border-radius:50%;
+  width:22px;
+  height:22px;
+  cursor:pointer;
+}
+.progress{
+  background:#eee;
+  height:8px;
+  border-radius:10px;
+  overflow:hidden;
+  margin-top:10px;
+}
+.progress-bar{
+  height:100%;
+  width:0%;
+  background:#667eea;
+}
+.modal{
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.7);
+  justify-content:center;
+  align-items:center;
+}
+.modal-content{
+  background:#fff;
+  padding:15px;
+  border-radius:10px;
+  max-width:500px;
+  width:90%;
+}
+.modal img{max-width:100%;}
+section{margin-top:40px;}
+footer{
+  text-align:center;
+  padding:20px;
+  color:#fff;
+}
+.dark-mode{
+  background:#1e1e1e;
+  color:white;
+}
+.dark-mode .container{background:#2a2a2a;}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+<h1>KM PDF Online</h1>
+
+<div class="top-bar">
+<div>📊 Total Images: <span id="imageCount">0</span></div>
+
+<select id="paperSize">
+<option value="A4">A4</option>
+<option value="A5">A5</option>
+<option value="Letter">Letter</option>
+<option value="B4">B4</option>
+<option value="B5">B5</option>
+</select>
+
+<button onclick="toggleDark()">🌙 Dark Mode</button>
+</div>
+
+<div class="drop-zone" id="dropZone">
+Drag & Drop Images or Click to Upload
+<input type="file" id="fileInput" multiple accept="image/*" hidden>
+</div>
+
+<button onclick="convertToPDF()">Convert to PDF</button>
+
+<div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+
+<div class="preview" id="preview"></div>
+
+<section>
+<h2>About KM PDF Online</h2>
+<p>Free secure JPG to PDF converter. No upload needed.</p>
+</section>
+
+<section>
+<h2>Privacy Policy</h2>
+<p>All image processing happens inside your browser. We do not upload or store your files.</p>
+</section>
+
+<section>
+<h2>Contact</h2>
+<p>Email: mkuntal625@gmail.com</p>
+</section>
+
+</div>
+
+<footer>© 2025 KM PDF Online</footer>
+
+<div class="modal" id="cropModal">
+<div class="modal-content">
+<img id="cropImage">
+<br><br>
+<button onclick="rotateLeft()">Rotate</button>
+<button onclick="applyCrop()">Apply</button>
+<button onclick="closeModal()">Cancel</button>
+</div>
+</div>
+
+<script>
+const dropZone=document.getElementById("dropZone");
+const fileInput=document.getElementById("fileInput");
+const preview=document.getElementById("preview");
+const imageCount=document.getElementById("imageCount");
+const progressBar=document.getElementById("progressBar");
+const cropModal=document.getElementById("cropModal");
+const cropImage=document.getElementById("cropImage");
+
+let filesList=[];
+let cropper;
+let currentIndex=null;
+
+dropZone.addEventListener("click",()=>fileInput.click());
+
+dropZone.addEventListener("dragover",(e)=>{
+e.preventDefault();
+dropZone.style.background="#e0e7ff";
+});
+
+dropZone.addEventListener("dragleave",()=>{
+dropZone.style.background="";
+});
+
+dropZone.addEventListener("drop",(e)=>{
+e.preventDefault();
+dropZone.style.background="";
+const dropped=Array.from(e.dataTransfer.files)
+.filter(f=>f.type.startsWith("image/"));
+filesList=filesList.concat(dropped);
+renderPreview();
+});
+
+fileInput.addEventListener("change",(e)=>{
+const selected=Array.from(e.target.files);
+filesList=filesList.concat(selected);
+renderPreview();
+fileInput.value="";
+});
+
+function renderPreview(){
+preview.innerHTML="";
+imageCount.innerText=filesList.length;
+
+filesList.forEach((file,index)=>{
+const reader=new FileReader();
+reader.onload=e=>{
+const box=document.createElement("div");
+box.className="image-box";
+
+const img=document.createElement("img");
+img.src=e.target.result;
+img.onclick=()=>openCropper(index);
+
+const remove=document.createElement("button");
+remove.innerHTML="✕";
+remove.className="remove-btn";
+remove.onclick=()=>{
+filesList.splice(index,1);
+renderPreview();
+};
+
+box.appendChild(img);
+box.appendChild(remove);
+preview.appendChild(box);
+};
+reader.readAsDataURL(file);
+});
+}
+
+function openCropper(index){
+currentIndex=index;
+const reader=new FileReader();
+reader.onload=e=>{
+cropImage.src=e.target.result;
+cropModal.style.display="flex";
+cropper=new Cropper(cropImage,{viewMode:1});
+};
+reader.readAsDataURL(filesList[index]);
+}
+
+function rotateLeft(){cropper.rotate(-90);}
+
+function applyCrop(){
+const canvas=cropper.getCroppedCanvas();
+canvas.toBlob(blob=>{
+filesList[currentIndex]=new File([blob],"edited.jpg",{type:"image/jpeg"});
+cropper.destroy();
+cropModal.style.display="none";
+renderPreview();
+});
+}
+
+function closeModal(){
+cropper.destroy();
+cropModal.style.display="none";
+}
+
+async function convertToPDF(){
+if(!filesList.length){alert("Upload image first!");return;}
+
+const {jsPDF}=window.jspdf;
+const size=document.getElementById("paperSize").value;
+
+const pdf=new jsPDF({unit:"mm",format:size});
+
+progressBar.style.width="0%";
+
+for(let i=0;i<filesList.length;i++){
+
+const imgData=await readFile(filesList[i]);
+if(i>0) pdf.addPage(size);
+
+const img=new Image();
+img.src=imgData;
+await new Promise(res=>img.onload=res);
+
+const pageW=pdf.internal.pageSize.getWidth();
+const pageH=pdf.internal.pageSize.getHeight();
+
+let imgW=pageW;
+let imgH=(img.height*imgW)/img.width;
+
+if(imgH>pageH){
+imgH=pageH;
+imgW=(img.width*imgH)/img.height;
+}
+
+pdf.addImage(imgData,"JPEG",
+(pageW-imgW)/2,
+(pageH-imgH)/2,
+imgW,imgH);
+
+progressBar.style.width=((i+1)/filesList.length*100)+"%";
+}
+
+pdf.save("KM_PDF_Online.pdf");
+progressBar.style.width="0%";
+}
+
+function readFile(file){
+return new Promise(resolve=>{
+const reader=new FileReader();
+reader.onload=e=>resolve(e.target.result);
+reader.readAsDataURL(file);
+});
+}
+
+function toggleDark(){
+document.body.classList.toggle("dark-mode");
+}
+</script>
+
+</body>
+</html>
